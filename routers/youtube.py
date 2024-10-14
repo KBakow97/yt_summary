@@ -1,20 +1,40 @@
 from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+from fastapi.templating import Jinja2Templates
 from services.transcription import url_checking, transcript
 from services.sum import model_summarization, model_summarization_openai
 from services.twilio import whatsupp_message, format_summary_message
-from twilio.twiml.messaging_response import MessagingResponse
 
-router_youtube = APIRouter(
-    prefix="/yt_transcript"
-)
+# Konfiguracja Jinja2
+templates = Jinja2Templates(directory="templates")
+
+class YTRequest(BaseModel):
+    url: str
+    phone_num: str
+    model: str
+
+router_youtube = APIRouter(prefix="/yt_transcript")
+
+@router_youtube.get("/", response_class=HTMLResponse)
+async def get_form(request: Request):
+    # Zwracamy template z formularzem
+    return templates.TemplateResponse("yt_transcript.html", {"request": request})
 
 @router_youtube.post("/")
-def get_yt_transcript(url:str,phone_num:str):
-    video_id = url_checking(url)
+async def get_yt_transcript(data: YTRequest):
+    video_id = url_checking(data.url)
     transcription = transcript(video_id)
-    summary = model_summarization_openai(transcription)
-    formatted_summary = format_summary_message(summary,url)
+    
+    # Wybór modelu na podstawie danych od użytkownika
+    if data.model == "openai":
+        summary = model_summarization_openai(transcription)
+    elif data.model == "custom":
+        summary = model_summarization(transcription)
+    else:
+        return {"status": "error", "message": "Invalid model selected"}
 
-    message = whatsupp_message(formatted_summary, phone_num)
-    return message
-
+    formatted_summary = format_summary_message(summary, data.url)
+    message = whatsupp_message(formatted_summary, data.phone_num)
+    
+    return {"status": "success", "message": message}

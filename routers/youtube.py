@@ -3,8 +3,8 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from fastapi.templating import Jinja2Templates
 from services.transcription import url_checking, transcript
-from services.sum import model_summarization, model_summarization_openai
-from services.twilio import whatsupp_message, format_summary_message
+from services.sum import model_summarization, model_summarization_openai, analyze_sentiment, detect_topics
+from services.twilio import whatsapp_message, format_summary_message
 
 # Konfiguracja Jinja2
 templates = Jinja2Templates(directory="templates")
@@ -34,7 +34,14 @@ async def get_yt_transcript(data: YTRequest):
     else:
         return {"status": "error", "message": "Invalid model selected"}
 
-    formatted_summary = format_summary_message(summary, data.url)
-    message = whatsupp_message(formatted_summary, data.phone_num)
+
+    # Detekcja tematów
+    topics = detect_topics(transcription)
+    sentiment = analyze_sentiment(transcription)
+
+    formatted_summary = format_summary_message(summary, data.url, topics, sentiment)
+    message = whatsapp_message(formatted_summary, data.phone_num)
+
+    
     
     return {"status": "success", "message": message}
